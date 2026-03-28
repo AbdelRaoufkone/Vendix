@@ -1,0 +1,396 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Seed : npm run db:seed (dans app/backend/)
+// Exécuté automatiquement par : prisma db seed
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  MERCHANT
+  CUSTOMER
+  SUPPLIER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  WAVE
+  ORANGE_MONEY
+  MTN_MOMO
+  BANK_TRANSFER
+  CARD
+  OTHER
+}
+
+enum SenderType {
+  MERCHANT
+  CUSTOMER
+  SUPPLIER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  ORDER_REF
+  RECEIPT_REF
+}
+
+enum EmployeeRole {
+  MANAGER
+  CASHIER
+  DELIVERY
+}
+
+enum PurchaseStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────
+// USER & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String?    @unique
+  phone        String?    @unique
+  name         String
+  password     String
+  role         Role       @default(CUSTOMER)
+  avatar       String?
+  isVerified   Boolean    @default(false)
+  refreshToken String?
+  boutiques    Boutique[]
+  supplierProfile Supplier?
+  customerProfiles CustomerProfile[]
+  employees    Employee[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// BOUTIQUE
+// ─────────────────────────────────────────────
+
+model Boutique {
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  name         String
+  description  String?
+  logo         String?
+  banner       String?
+  banners      String[]
+  phone        String?
+  address      String?
+  city         String?
+  openHours    Json?     // { mon: {open: "08:00", close: "18:00"}, ... }
+  themeColor   String    @default("#6366f1")
+  isActive     Boolean   @default(true)
+  ownerId      String
+  owner        User      @relation(fields: [ownerId], references: [id])
+  products     Product[]
+  categories   Category[]
+  orders       Order[]
+  customers    CustomerProfile[]
+  employees    Employee[]
+  suppliers    Supplier[]
+  messages     Conversation[]
+  settings     BoutiqueSettings?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model BoutiqueSettings {
+  id                  String   @id @default(cuid())
+  boutiqueId          String   @unique
+  boutique            Boutique @relation(fields: [boutiqueId], references: [id])
+  currency            String   @default("XOF")
+  taxRate             Decimal  @default(0)
+  lowStockThreshold   Int      @default(5)
+  autoConfirmOrders   Boolean  @default(false)
+  loyaltyPointRate    Int      @default(10) // points par 1000 dépensé
+  deliveryZones       Json?
+  notifEmail          Boolean  @default(true)
+  notifSms            Boolean  @default(false)
+  notifPush           Boolean  @default(true)
+}
+
+// ─────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────
+
+model Category {
+  id         String    @id @default(cuid())
+  boutiqueId String
+  boutique   Boutique  @relation(fields: [boutiqueId], references: [id])
+  name       String
+  icon       String?
+  parentId   String?
+  parent     Category? @relation("SubCategories", fields: [parentId], references: [id])
+  children   Category[] @relation("SubCategories")
+  products   Product[]
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  boutiqueId   String
+  boutique     Boutique    @relation(fields: [boutiqueId], references: [id])
+  categoryId   String?
+  category     Category?   @relation(fields: [categoryId], references: [id])
+  name         String
+  description  String?
+  images       String[]
+  price        Decimal
+  promoPrice   Decimal?
+  promoEndsAt  DateTime?
+  costPrice    Decimal?    // prix achat fournisseur
+  stock        Int         @default(0)
+  lowStockAt   Int         @default(5)
+  sku          String?
+  isActive     Boolean     @default(true)
+  isFeatured   Boolean     @default(false)
+  variants     Variant[]
+  orderItems   OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Variant {
+  id        String    @id @default(cuid())
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  name      String    // ex: "Taille", "Couleur"
+  value     String    // ex: "XL", "Rouge"
+  priceAdjust Decimal @default(0)
+  stock     Int       @default(0)
+}
+
+// ─────────────────────────────────────────────
+// CUSTOMERS
+// ─────────────────────────────────────────────
+
+model CustomerProfile {
+  id           String    @id @default(cuid())
+  boutiqueId   String
+  boutique     Boutique  @relation(fields: [boutiqueId], references: [id])
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id])
+  name         String
+  phone        String?
+  email        String?
+  addresses    Address[]
+  notes        String?
+  tags         String[]
+  loyaltyPoints Int      @default(0)
+  orders       Order[]
+  conversations Conversation[]
+  createdAt    DateTime  @default(now())
+}
+
+model Address {
+  id          String          @id @default(cuid())
+  customerId  String
+  customer    CustomerProfile @relation(fields: [customerId], references: [id])
+  label       String          // "Domicile", "Bureau"
+  address     String
+  city        String?
+  isDefault   Boolean         @default(false)
+}
+
+// ─────────────────────────────────────────────
+// ORDERS
+// ─────────────────────────────────────────────
+
+model Order {
+  id              String         @id @default(cuid())
+  number          String         @unique // VDX-2024-00142
+  boutiqueId      String
+  boutique        Boutique       @relation(fields: [boutiqueId], references: [id])
+  customerId      String
+  customer        CustomerProfile @relation(fields: [customerId], references: [id])
+  items           OrderItem[]
+  status          OrderStatus    @default(PENDING)
+  paymentStatus   PaymentStatus  @default(UNPAID)
+  paymentMethod   PaymentMethod?
+  subtotal        Decimal
+  discount        Decimal        @default(0)
+  deliveryFee     Decimal        @default(0)
+  total           Decimal
+  paidAmount      Decimal        @default(0)
+  deliveryAddress String?
+  notes           String?
+  assignedTo      String?        // employee id
+  receipt         Receipt?
+  payments        Payment[]
+  statusHistory   OrderStatusLog[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  variantId  String?
+  name       String  // snapshot du nom au moment de la commande
+  price      Decimal // snapshot du prix
+  quantity   Int
+  total      Decimal
+}
+
+model OrderStatusLog {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id])
+  status    OrderStatus
+  note      String?
+  createdBy String?
+  createdAt DateTime    @default(now())
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  orderId   String
+  order     Order         @relation(fields: [orderId], references: [id])
+  amount    Decimal
+  method    PaymentMethod
+  reference String?       // numéro transaction mobile money
+  note      String?
+  createdAt DateTime      @default(now())
+}
+
+model Receipt {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id])
+  number     String   @unique // REC-2024-00142
+  pdfUrl     String?
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// SUPPLIERS & PURCHASES
+// ─────────────────────────────────────────────
+
+model Supplier {
+  id           String          @id @default(cuid())
+  boutiqueId   String
+  boutique     Boutique        @relation(fields: [boutiqueId], references: [id])
+  userId       String?         @unique
+  user         User?           @relation(fields: [userId], references: [id])
+  name         String
+  phone        String?
+  email        String?
+  address      String?
+  notes        String?
+  purchaseOrders PurchaseOrder[]
+  conversations  Conversation[]
+  createdAt    DateTime        @default(now())
+}
+
+model PurchaseOrder {
+  id           String         @id @default(cuid())
+  number       String         @unique // PO-2024-00042
+  boutiqueId   String
+  supplierId   String
+  supplier     Supplier       @relation(fields: [supplierId], references: [id])
+  items        PurchaseItem[]
+  status       PurchaseStatus @default(DRAFT)
+  total        Decimal
+  notes        String?
+  expectedAt   DateTime?
+  receivedAt   DateTime?
+  pdfUrl       String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model PurchaseItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId       String?
+  productName     String        // snapshot
+  quantity        Int
+  orderedQty      Int
+  receivedQty     Int           @default(0)
+  unitCost        Decimal
+  total           Decimal
+}
+
+// ─────────────────────────────────────────────
+// EMPLOYEES
+// ─────────────────────────────────────────────
+
+model Employee {
+  id         String       @id @default(cuid())
+  boutiqueId String
+  boutique   Boutique     @relation(fields: [boutiqueId], references: [id])
+  userId     String
+  user       User         @relation(fields: [userId], references: [id])
+  role       EmployeeRole @default(CASHIER)
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+}
+
+// ─────────────────────────────────────────────
+// MESSAGING
+// ─────────────────────────────────────────────
+
+model Conversation {
+  id           String          @id @default(cuid())
+  boutiqueId   String
+  boutique     Boutique        @relation(fields: [boutiqueId], references: [id])
+  customerId   String?
+  customer     CustomerProfile? @relation(fields: [customerId], references: [id])
+  supplierId   String?
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id])
+  messages     Message[]
+  lastMessageAt DateTime?
+  unreadCount  Int             @default(0)
+  createdAt    DateTime        @default(now())
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  senderType     SenderType
+  content        String
+  type           MessageType  @default(TEXT)
+  metadata       Json?        // { orderId, receiptId, imageUrl }
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+}

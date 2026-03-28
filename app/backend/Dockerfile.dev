@@ -1,0 +1,26 @@
+# ──────────────────────────────────────────────
+# VENDIX Backend — Dockerfile Développement
+# Hot reload via tsx watch
+# ──────────────────────────────────────────────
+
+FROM node:20-alpine
+WORKDIR /app
+
+# Installer les dépendances système
+RUN apk add --no-cache dumb-init
+
+# Installer les dépendances npm
+COPY package*.json ./
+RUN npm install
+
+# Générer le client Prisma
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Le code source est monté via volume dans docker-compose.dev.yml
+# COPY . . n'est pas nécessaire ici
+
+EXPOSE 5000
+
+# En dev : db push (pas de migrations), puis tsx watch
+CMD sh -c "npx prisma db push --skip-generate && npm run dev"

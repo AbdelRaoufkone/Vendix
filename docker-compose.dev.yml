@@ -1,0 +1,116 @@
+# ══════════════════════════════════════════════════════════════
+#  VENDIX — Docker Compose DÉVELOPPEMENT
+#  Hot reload activé — volumes montés sur le code source local
+#  Usage : docker compose -f docker-compose.dev.yml up
+# ══════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Base de données PostgreSQL ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vendix-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     vendix
+      POSTGRES_PASSWORD: vendixpass
+      POSTGRES_DB:       vendix
+    ports:
+      - "5432:5432"      # exposé pour accès avec Prisma Studio local
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - vendix-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vendix"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Cache Redis ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: vendix-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"      # exposé pour debug avec redis-cli local
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - vendix-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Backend API (hot reload) ────────────────────────────────
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile.dev
+    container_name: vendix-backend-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV:           development
+      PORT:               5000
+      DATABASE_URL:       postgresql://vendix:vendixpass@postgres:5432/vendix
+      REDIS_URL:          redis://redis:6379
+      JWT_ACCESS_SECRET:  dev-access-secret-change-in-prod
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-prod
+      FRONTEND_URL:       http://localhost:3000
+    ports:
+      - "5000:5000"
+    volumes:
+      # Monter le code source pour le hot reload
+      - ./app/backend/src:/app/src
+      - ./app/backend/prisma:/app/prisma
+      # Éviter d'écraser le node_modules du container
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vendix-dev
+
+  # ── Frontend Next.js (hot reload) ───────────────────────────
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile.dev
+    container_name: vendix-frontend-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV:            development
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    volumes:
+      # Monter le code source pour le hot reload
+      - ./app/frontend/src:/app/src
+      - ./app/frontend/public:/app/public
+      - ./app/frontend/next.config.js:/app/next.config.js
+      - ./app/frontend/tailwind.config.ts:/app/tailwind.config.ts
+      # Éviter d'écraser le node_modules et .next du container
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - vendix-dev
+
+# ── Volumes dev ─────────────────────────────────────────────
+volumes:
+  postgres_dev_data:
+    name: vendix-postgres-dev-data
+  redis_dev_data:
+    name: vendix-redis-dev-data
+
+# ── Réseau dev ──────────────────────────────────────────────
+networks:
+  vendix-dev:
+    name: vendix-dev
+    driver: bridge

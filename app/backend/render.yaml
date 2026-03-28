@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: vendix-backend
+    runtime: node
+    region: frankfurt
+    rootDir: .
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: ./entrypoint.sh
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+    healthCheckPath: /health

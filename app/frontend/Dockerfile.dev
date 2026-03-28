@@ -1,0 +1,18 @@
+# ──────────────────────────────────────────────
+# VENDIX Frontend — Dockerfile Développement
+# Hot reload Next.js
+# ──────────────────────────────────────────────
+
+FROM node:20-alpine
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+# Le code source est monté via volume dans docker-compose.dev.yml
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_TELEMETRY_DISABLED=1
+
+CMD ["npm", "run", "dev"]
