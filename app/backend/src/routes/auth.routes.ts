@@ -114,3 +114,21 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res, next) => {
     next(e)
   }
 })
+
+// POST /api/auth/push-token — enregistrer le token de notification push
+authRouter.post('/push-token', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { pushToken } = z.object({
+      pushToken: z.string().nullable().optional()
+    }).parse(req.body)
+
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { pushToken: pushToken || null },
+    })
+
+    res.json({ success: true, message: 'Push token mis à jour' })
+  } catch (e) {
+    next(e)
+  }
+})

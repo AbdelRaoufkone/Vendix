@@ -88,10 +88,12 @@ model User {
   avatar       String?
   isVerified   Boolean    @default(false)
   refreshToken String?
+  pushToken    String?
   boutiques    Boutique[]
   supplierProfile Supplier?
   customerProfiles CustomerProfile[]
   employees    Employee[]
+  notifications Notification[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -123,6 +125,7 @@ model Boutique {
   employees    Employee[]
   suppliers    Supplier[]
   messages     Conversation[]
+  notifications Notification[]
   settings     BoutiqueSettings?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -141,6 +144,7 @@ model BoutiqueSettings {
   notifEmail          Boolean  @default(true)
   notifSms            Boolean  @default(false)
   notifPush           Boolean  @default(true)
+  contactEmail        String?
 }
 
 // ─────────────────────────────────────────────
@@ -393,4 +397,18 @@ model Message {
   metadata       Json?        // { orderId, receiptId, imageUrl }
   readAt         DateTime?
   createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  boutiqueId String
+  boutique   Boutique @relation(fields: [boutiqueId], references: [id])
+  title      String
+  body       String
+  type       String   @default("message") // "message" | "order" | "system"
+  data       Json?    // { conversationId, orderId, etc. }
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
 }

@@ -6,30 +6,27 @@ import { AppError } from '../middleware/error.middleware'
 
 export const productRouter = Router()
 
-// Valider que chaque image est bien un base64 JPEG/PNG et ne dépasse pas ~200KB
-const base64ImageSchema = z.string()
-  .refine(s => s.startsWith('data:image/'), 'Format base64 invalide')
+// Valider que l'image est soit une URL existante, soit un base64 (max ~200KB)
+const imageSchema = z.string()
+  .refine(s => s.startsWith('http') || s.startsWith('data:image/'), 'Format d\'image invalide')
   .refine(s => {
+    if (s.startsWith('http')) return true
     const base = s.split(',')[1] ?? ''
     const sizeKB = Math.round((base.length * 3) / 4 / 1024)
-    return sizeKB <= 200
-  }, 'Image trop lourde (max 200KB après compression)')
+    return sizeKB <= 500 // Augmenté à 500KB pour plus de souplesse
+  }, 'Image trop lourde (max 500KB)')
 
 const productSchema = z.object({
   boutiqueId: z.string(),
-  categoryId: z.string().optional(),
+  categoryId: z.string().nullable().optional(),
   name: z.string().min(1).max(100),
-  description: z.string().max(1000).optional(),
-  images: z.array(base64ImageSchema).max(4, 'Maximum 4 images par produit').default([]),
+  description: z.string().max(1000).nullable().optional(),
+  images: z.array(imageSchema).max(4, 'Maximum 4 images').default([]),
   price: z.number().positive(),
-  promoPrice: z.number().positive().optional(),
-  promoEndsAt: z.string().datetime().optional(),
-  costPrice: z.number().positive().optional(),
+  promoPrice: z.number().positive().nullable().optional(),
+  costPrice: z.number().positive().nullable().optional(),
   stock: z.number().int().min(0).default(0),
-  lowStockAt: z.number().int().min(0).default(5),
-  sku: z.string().optional(),
   isActive: z.boolean().default(true),
-  isFeatured: z.boolean().default(false),
 })
 
 productRouter.post('/', authenticate, async (req: AuthRequest, res, next) => {
@@ -64,9 +61,10 @@ productRouter.get('/', authenticate, async (req: AuthRequest, res, next) => {
 
 productRouter.patch('/:id', authenticate, async (req, res, next) => {
   try {
+    const data = productSchema.partial().parse(req.body)
     const product = await prisma.product.update({
       where: { id: req.params.id },
-      data: req.body,
+      data,
       include: { variants: true },
     })
     res.json({ success: true, product })

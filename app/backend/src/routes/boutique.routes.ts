@@ -135,6 +135,7 @@ const updateSettingsSchema = z.object({
   notifEmail: z.boolean().optional(),
   notifSms: z.boolean().optional(),
   notifPush: z.boolean().optional(),
+  contactEmail: z.string().email().nullable().optional(),
 })
 
 // PATCH /api/boutiques/:id/settings — mettre à jour les paramètres boutique

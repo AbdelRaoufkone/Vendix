@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io'
 import { prisma } from '../lib/prisma'
 import { verifyToken } from '../lib/jwt'
+import { notificationService } from '../services/notification.service'
 
 interface AuthSocket extends Socket {
   userId?: string
@@ -80,16 +81,7 @@ export function initSocketHandlers(io: Server) {
 
         // Notifier le commerçant uniquement si le message vient d'un client/fournisseur
         if (!isFromMerchant) {
-          const conversation = await prisma.conversation.findUnique({
-            where: { id: conversationId },
-            select: { boutiqueId: true },
-          })
-          if (conversation) {
-            io.to(`boutique:${conversation.boutiqueId}`).emit('notification:new_message', {
-              conversationId,
-              message,
-            })
-          }
+          await notificationService.notifyNewMessage(conversationId, message)
         }
 
         ack?.({ success: true, message })

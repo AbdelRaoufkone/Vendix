@@ -57,23 +57,59 @@ statsRouter.get('/revenue', authenticate, async (req: AuthRequest, res, next) =>
 
     const orders = await prisma.order.findMany({
       where: { boutiqueId, createdAt: { gte: from }, status: { not: 'CANCELLED' } },
-      select: { total: true, createdAt: true },
+      select: { total: true, createdAt: true, id: true, items: { include: { product: { select: { name: true } } } } },
       orderBy: { createdAt: 'asc' },
     })
 
-    // Grouper par jour
-    const grouped: Record<string, number> = {}
+    // Métriques globales sur la période
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0)
+    const totalOrders = orders.length
+    const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0
+
+    // Grouper par jour pour le graphique
+    const grouped: Record<string, { date: string; revenue: number; orders: number }> = {}
     for (let i = 0; i < days; i++) {
       const d = new Date(Date.now() - (days - 1 - i) * 86400000)
       const key = d.toISOString().split('T')[0]
-      grouped[key] = 0
+      grouped[key] = { date: key, revenue: 0, orders: 0 }
     }
+
     orders.forEach(o => {
       const key = o.createdAt.toISOString().split('T')[0]
-      if (grouped[key] !== undefined) grouped[key] += Number(o.total)
+      if (grouped[key]) {
+        grouped[key].revenue += Number(o.total)
+        grouped[key].orders += 1
+      }
     })
 
-    const data = Object.entries(grouped).map(([date, revenue]) => ({ date, revenue }))
-    res.json({ success: true, data })
+    const chartData = Object.values(grouped)
+
+    // Meilleur jour
+    const bestDay = chartData.reduce((prev, curr) => (curr.revenue > prev.revenue ? curr : prev), chartData[0] || { date: '', revenue: 0 })
+
+    // Top produits (basé sur le chiffre d'affaires généré par produit dans la période)
+    const productStats: Record<string, { name: string; quantity: number; revenue: number }> = {}
+    orders.forEach(o => {
+      o.items.forEach(item => {
+        const name = item.product.name
+        if (!productStats[name]) productStats[name] = { name, quantity: 0, revenue: 0 }
+        productStats[name].quantity += item.quantity
+        productStats[name].revenue += Number(item.total)
+      })
+    })
+
+    const topProducts = Object.values(productStats)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5)
+
+    res.json({
+      success: true,
+      totalRevenue,
+      totalOrders,
+      averageBasket,
+      bestDay: bestDay.revenue > 0 ? bestDay : undefined,
+      revenueByDay: chartData,
+      topProducts
+    })
   } catch (e) { next(e) }
 })
