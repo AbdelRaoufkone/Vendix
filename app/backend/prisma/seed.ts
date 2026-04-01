@@ -191,7 +191,7 @@ async function main() {
   console.log('──────────────────────────────────')
   console.log('  Email    : admin@vendix.com')
   console.log('  Password : admin123')
-  console.log(`  Boutique : http://localhost:3000/boutique/demo-boutique`)
+  console.log(`  Boutique : ${process.env.FRONTEND_URL || 'http://localhost:3005'}/boutique/demo-boutique`)
   console.log('──────────────────────────────────')
 }
 

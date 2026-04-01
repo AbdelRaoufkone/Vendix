@@ -7,7 +7,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Installer les dépendances système
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init openssl
 
 # Installer les dépendances npm
 COPY package*.json ./
@@ -23,4 +23,4 @@ RUN npx prisma generate
 EXPOSE 5000
 
 # En dev : db push (pas de migrations), puis tsx watch
-CMD sh -c "npx prisma db push --skip-generate && npm run dev"
+CMD sh -c "npx prisma db push --skip-generate && npm run db:seed && npm run dev"

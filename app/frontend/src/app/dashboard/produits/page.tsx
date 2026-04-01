@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, MoreVertical, Package, X, Loader2,
@@ -25,7 +25,7 @@ interface Product {
   description?: string
   price: number
   promoPrice?: number
-  purchasePrice?: number
+  costPrice?: number
   stock: number
   alertThreshold?: number
   images: string[]
@@ -40,7 +40,7 @@ interface ProductForm {
   categoryId: string
   price: string
   promoPrice: string
-  purchasePrice: string
+  costPrice: string
   stock: string
   alertThreshold: string
   images: string[]
@@ -48,7 +48,7 @@ interface ProductForm {
 
 const EMPTY_FORM: ProductForm = {
   name: '', description: '', categoryId: '', price: '',
-  promoPrice: '', purchasePrice: '', stock: '', alertThreshold: '', images: [],
+  promoPrice: '', costPrice: '', stock: '', alertThreshold: '', images: [],
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
@@ -62,6 +62,7 @@ export default function ProduitsPage() {
   const [categoryModal, setCategoryModal] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const categoriesQuery = useQuery<Category[]>({
     queryKey: ['categories', boutiqueId],
@@ -85,13 +86,35 @@ export default function ProduitsPage() {
       api.patch(`/products/${product.id}`, { isActive: !product.isActive }).then(r => r.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
+  
+  const duplicateMutation = useMutation({
+    mutationFn: (product: Product) => {
+      const { id, category, ...rest } = product
+      return api.post('/products', {
+        ...rest,
+        name: `${product.name} (copie)`,
+        boutiqueId: boutiqueId!
+      }).then(r => r.data)
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+  })
 
-  // Close menu on outside click
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/products/${id}`).then(r => r.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+  })
+
+  // Close menu on outside click securely
   useEffect(() => {
-    const handler = () => setOpenMenuId(null)
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [])
+    const handler = (e: MouseEvent) => {
+      // Si le clic est à l'extérieur du menu actif, on ferme
+      if (openMenuId && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openMenuId])
 
   if (loadingBoutique) return <LoadingScreen />
 
@@ -102,7 +125,7 @@ export default function ProduitsPage() {
     <div className="p-4 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-2xl font-bold text-gray-900">Produits</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Mes Produits</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setCategoryModal(true)}
@@ -173,13 +196,22 @@ export default function ProduitsPage() {
               key={product.id}
               product={product}
               isMenuOpen={openMenuId === product.id}
+              activeMenuRef={openMenuId === product.id ? menuRef : undefined}
               onMenuToggle={(e) => {
+                e.preventDefault()
                 e.stopPropagation()
                 setOpenMenuId(openMenuId === product.id ? null : product.id)
               }}
               onEdit={() => { setProductModal({ open: true, product }); setOpenMenuId(null) }}
+              onDuplicate={() => { duplicateMutation.mutate(product); setOpenMenuId(null) }}
               onAdjustStock={() => { setStockModal(product); setOpenMenuId(null) }}
               onToggleActive={() => { toggleActiveMutation.mutate(product); setOpenMenuId(null) }}
+              onDelete={() => {
+                if (window.confirm('Voulez-vous vraiment supprimer ce produit ?')) {
+                  deleteMutation.mutate(product.id)
+                }
+                setOpenMenuId(null)
+              }}
             />
           ))}
         </div>
@@ -229,14 +261,17 @@ export default function ProduitsPage() {
 // ── ProductCard ───────────────────────────────────────────────────────────────
 
 function ProductCard({
-  product, isMenuOpen, onMenuToggle, onEdit, onAdjustStock, onToggleActive
+  product, isMenuOpen, activeMenuRef, onMenuToggle, onEdit, onDuplicate, onAdjustStock, onToggleActive, onDelete
 }: {
   product: Product
   isMenuOpen: boolean
+  activeMenuRef?: React.RefObject<HTMLDivElement>
   onMenuToggle: (e: React.MouseEvent) => void
   onEdit: () => void
+  onDuplicate: () => void
   onAdjustStock: () => void
   onToggleActive: () => void
+  onDelete: () => void
 }) {
   const stockColor =
     product.stock <= 5 ? 'text-red-600 bg-red-50' :
@@ -244,9 +279,9 @@ function ProductCard({
     'text-green-600 bg-green-50'
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 overflow-hidden ${!product.isActive ? 'opacity-60' : ''}`}>
-      {/* Image */}
-      <div className="aspect-square bg-gray-100 relative">
+    <div className={`bg-white rounded-xl border border-gray-100 ${isMenuOpen ? 'z-30' : 'z-0'} relative ${!product.isActive ? 'opacity-60' : ''}`}>
+      {/* Image Container with rounded top and overflow hidden */}
+      <div className="aspect-square bg-gray-100 relative rounded-t-xl overflow-hidden">
         {product.images?.[0] ? (
           <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
         ) : (
@@ -254,30 +289,41 @@ function ProductCard({
             <Package size={32} />
           </div>
         )}
-        {/* Menu button */}
-        <div className="absolute top-1.5 right-1.5">
-          <button
-            onClick={onMenuToggle}
-            className="p-1.5 bg-white/90 rounded-lg shadow-sm text-gray-600 hover:text-gray-900"
-          >
-            <MoreVertical size={14} />
-          </button>
+      </div>
+      
+      {/* Menu button moved OUTSIDE image container to avoid clipping */}
+      <div className="absolute top-2 right-2 z-[60]" ref={activeMenuRef}>
+        <button
+          onClick={onMenuToggle}
+          className="p-2 bg-white/95 rounded-lg shadow-md text-gray-700 hover:text-indigo-600 border border-gray-200 transition-all hover:scale-110 active:scale-95 flex items-center justify-center"
+          title="Options"
+        >
+          <MoreVertical size={16} />
+        </button>
           {isMenuOpen && (
-            <div className="absolute right-0 top-8 bg-white rounded-xl shadow-lg border border-gray-100 z-10 min-w-[140px]">
-              <button onClick={onEdit} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl">
-                <Edit size={14} /> Modifier
+            <div 
+              className="absolute right-0 top-10 bg-white rounded-xl shadow-xl border border-gray-100 z-50 min-w-[160px] py-1 overflow-hidden"
+            >
+              <button onClick={onEdit} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                <Edit size={14} className="text-indigo-600" /> Modifier
               </button>
-              <button onClick={onAdjustStock} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                <TrendingDown size={14} /> Ajuster stock
+              <button onClick={onDuplicate} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                <Plus size={14} className="text-green-600" /> Dupliquer
               </button>
-              <button onClick={onToggleActive} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-b-xl">
-                <ToggleLeft size={14} /> {product.isActive ? 'Désactiver' : 'Activer'}
+              <button onClick={onAdjustStock} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                <TrendingDown size={14} className="text-orange-600" /> Ajuster stock
+              </button>
+              <button onClick={onToggleActive} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-50">
+                <ToggleLeft size={14} className={product.isActive ? 'text-gray-400' : 'text-green-500'} /> 
+                {product.isActive ? 'Désactiver' : 'Activer'}
+              </button>
+              <button onClick={onDelete} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border-t border-gray-50">
+                <X size={14} /> Supprimer
               </button>
             </div>
           )}
         </div>
-      </div>
-
+      
       {/* Info */}
       <div className="p-3">
         <p className="font-semibold text-sm text-gray-900 truncate">{product.name}</p>
@@ -312,7 +358,7 @@ function ProductModal({ product, boutiqueId, categories, onClose, onSuccess }: {
       categoryId: product.categoryId ?? '',
       price: String(product.price),
       promoPrice: String(product.promoPrice ?? ''),
-      purchasePrice: String(product.purchasePrice ?? ''),
+      costPrice: String(product.costPrice ?? ''),
       stock: String(product.stock),
       alertThreshold: String(product.alertThreshold ?? ''),
       images: product.images ?? [],
@@ -327,7 +373,7 @@ function ProductModal({ product, boutiqueId, categories, onClose, onSuccess }: {
         categoryId: form.categoryId || undefined,
         price: parseFloat(form.price),
         promoPrice: form.promoPrice ? parseFloat(form.promoPrice) : undefined,
-        purchasePrice: form.purchasePrice ? parseFloat(form.purchasePrice) : undefined,
+        costPrice: form.costPrice ? parseFloat(form.costPrice) : undefined,
         stock: parseInt(form.stock) || 0,
         alertThreshold: form.alertThreshold ? parseInt(form.alertThreshold) : undefined,
         images: form.images,
@@ -385,7 +431,7 @@ function ProductModal({ product, boutiqueId, categories, onClose, onSuccess }: {
           </div>
           <div>
             <Label>Prix d'achat</Label>
-            <Input type="number" {...field('purchasePrice')} placeholder="0" />
+            <Input type="number" {...field('costPrice')} placeholder="0" />
           </div>
           <div>
             <Label>Stock initial</Label>

@@ -5,18 +5,17 @@
 # ══════════════════════════════════════════════════════════════
 
 services:
-
   # ── Base de données PostgreSQL ──────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: vendix-postgres-dev
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     vendix
+      POSTGRES_USER: vendix
       POSTGRES_PASSWORD: vendixpass
-      POSTGRES_DB:       vendix
+      POSTGRES_DB: vendix
     ports:
-      - "5432:5432"      # exposé pour accès avec Prisma Studio local
+      - "${POSTGRES_PORT:-5444}:5432" # exposé pour accès avec Prisma Studio local
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     networks:
@@ -33,7 +32,7 @@ services:
     container_name: vendix-redis-dev
     restart: unless-stopped
     ports:
-      - "6379:6379"      # exposé pour debug avec redis-cli local
+      - "${REDIS_PORT:-6380}:6379" # exposé pour debug avec redis-cli local
     volumes:
       - redis_dev_data:/data
     networks:
@@ -52,15 +51,16 @@ services:
     container_name: vendix-backend-dev
     restart: unless-stopped
     environment:
-      NODE_ENV:           development
-      PORT:               5000
-      DATABASE_URL:       postgresql://vendix:vendixpass@postgres:5432/vendix
-      REDIS_URL:          redis://redis:6379
-      JWT_ACCESS_SECRET:  dev-access-secret-change-in-prod
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgresql://vendix:vendixpass@postgres:5432/vendix
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-prod
       JWT_REFRESH_SECRET: dev-refresh-secret-change-in-prod
-      FRONTEND_URL:       http://localhost:3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
+      CHOKIDAR_USEPOLLING: "true"
     ports:
-      - "5000:5000"
+      - "${BACKEND_PORT:-5001}:5000"
     volumes:
       # Monter le code source pour le hot reload
       - ./app/backend/src:/app/src
@@ -83,20 +83,22 @@ services:
     container_name: vendix-frontend-dev
     restart: unless-stopped
     environment:
-      NODE_ENV:            development
-      NEXT_PUBLIC_API_URL: http://localhost:5000
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5001}
       NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3005}:3000"
     volumes:
       # Monter le code source pour le hot reload
       - ./app/frontend/src:/app/src
       - ./app/frontend/public:/app/public
       - ./app/frontend/next.config.js:/app/next.config.js
       - ./app/frontend/tailwind.config.ts:/app/tailwind.config.ts
-      # Éviter d'écraser le node_modules et .next du container
+      - ./app/frontend/postcss.config.js:/app/postcss.config.js
+      - ./app/frontend/tsconfig.json:/app/tsconfig.json
+      # Éviter d'écraser le node_modules du container
       - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
     networks:

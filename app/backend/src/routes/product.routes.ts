@@ -73,9 +73,8 @@ productRouter.patch('/:id', authenticate, async (req, res, next) => {
 
 productRouter.delete('/:id', authenticate, async (req, res, next) => {
   try {
-    await prisma.product.update({
+    await prisma.product.delete({
       where: { id: req.params.id },
-      data: { isActive: false },
     })
     res.json({ success: true })
   } catch (e) { next(e) }

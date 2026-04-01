@@ -8,6 +8,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
+COPY . .
 
 # Le code source est monté via volume dans docker-compose.dev.yml
 EXPOSE 3000

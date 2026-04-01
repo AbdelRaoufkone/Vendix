@@ -30,14 +30,14 @@ const server = http.createServer(app)
 // Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.FRONTEND_URL || 'http://localhost:3005',
     credentials: true,
   },
 })
 
 // Middleware
 app.use(helmet())
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
+app.use(cors({ origin: [process.env.FRONTEND_URL || 'http://localhost:3005', 'http://127.0.0.1:3005'], credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 app.use(morgan(
   ':remote-addr :method :url :status :res[content-length]B :response-time ms',
@@ -67,8 +67,8 @@ initSocketHandlers(io)
 // Error handler (doit être en dernier)
 app.use(errorHandler)
 
-const PORT = process.env.PORT || 5000
-server.listen(PORT, () => {
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5001
+server.listen(PORT, '0.0.0.0', () => {
   logger.info(`VENDIX API running on port ${PORT}`, {
     env: process.env.NODE_ENV,
     pid: process.pid,

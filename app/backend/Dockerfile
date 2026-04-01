@@ -5,12 +5,14 @@
 # Stage 1 : Installer les dépendances
 FROM node:20-alpine AS deps
 WORKDIR /app
+RUN apk add --no-cache openssl
 COPY package*.json ./
 RUN npm ci --frozen-lockfile
 
 # Stage 2 : Build TypeScript + Prisma client
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
@@ -19,7 +21,7 @@ RUN npm run build
 # Stage 3 : Image finale légère
 FROM node:20-alpine AS runner
 # dumb-init gère les signaux Unix proprement (SIGTERM → arrêt gracieux)
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init openssl
 WORKDIR /app
 ENV NODE_ENV=production
 

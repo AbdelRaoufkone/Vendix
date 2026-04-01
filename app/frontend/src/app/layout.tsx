@@ -6,6 +6,7 @@ import { Providers } from './providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.FRONTEND_URL || 'http://localhost:3005'),
   title: 'VENDIX — Gérez votre boutique',
   description: 'Plateforme de commerce moderne. Gérez commandes, clients, stocks et fournisseurs depuis une seule app.',
   manifest: '/manifest.json',

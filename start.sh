@@ -12,7 +12,7 @@ GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='
 
 log()  { echo -e "${BLUE}▶${NC} $1"; }
 ok()   { echo -e "${GREEN}✓${NC} $1"; }
-err()  { echo -e "${YELLOW}✗${NC} $1"; exit 1; }
+err()  { echo -e "${YELLOW}✗${NC} $1"; echo "Appuyez sur Entrée pour quitter..."; read dummy; exit 1; }
 
 echo -e "\n${BOLD}${BLUE}  VENDIX${NC} — Démarrage\n"
 
@@ -21,8 +21,9 @@ echo -e "\n${BOLD}${BLUE}  VENDIX${NC} — Démarrage\n"
 pkill -f "tsx watch" 2>/dev/null || true
 pkill -f "next dev"  2>/dev/null || true
 lsof -ti :5000 | xargs kill -9 2>/dev/null || true
+lsof -ti :5001 | xargs kill -9 2>/dev/null || true
 lsof -ti :3000 | xargs kill -9 2>/dev/null || true
-lsof -ti :3001 | xargs kill -9 2>/dev/null || true
+lsof -ti :3005 | xargs kill -9 2>/dev/null || true
 sleep 1
 
 # ── 1. PostgreSQL + Redis ─────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
     log "Création PostgreSQL..."
     docker run -d --name vendix-pg \
       -e POSTGRES_USER=vendix -e POSTGRES_PASSWORD=vendixpass -e POSTGRES_DB=vendix \
-      -p 5433:5432 postgres:16 &>/dev/null
+      -p 5444:5432 postgres:16 &>/dev/null
   fi
 
   # Redis
@@ -44,7 +45,7 @@ if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
     docker start vendix-redis &>/dev/null || true
   else
     log "Création Redis..."
-    docker run -d --name vendix-redis -p 6379:6379 redis:7-alpine &>/dev/null
+    docker run -d --name vendix-redis -p 6380:6379 redis:7-alpine &>/dev/null
   fi
 
   # Attendre PostgreSQL (max 30s)
@@ -101,10 +102,10 @@ echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BOLD}  VENDIX est prêt !${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${GREEN}→ App        :${NC} http://localhost:3000"
-echo -e "  ${GREEN}→ Boutique   :${NC} http://localhost:3000/boutique/demo-boutique"
-echo -e "  ${GREEN}→ Dashboard  :${NC} http://localhost:3000/dashboard"
-echo -e "  ${GREEN}→ API        :${NC} http://localhost:5000/health"
+echo -e "  ${GREEN}→ App        :${NC} http://localhost:3005"
+echo -e "  ${GREEN}→ Boutique   :${NC} http://localhost:3005/boutique/demo-boutique"
+echo -e "  ${GREEN}→ Dashboard  :${NC} http://localhost:3005/dashboard"
+echo -e "  ${GREEN}→ API        :${NC} http://localhost:5001/health"
 echo ""
 echo -e "  ${BOLD}Connexion :${NC} admin@vendix.com / admin123"
 echo ""
@@ -119,5 +120,5 @@ npx concurrently \
   --prefix-colors "bgBlue.bold,bgMagenta.bold" \
   --timestamp-format "HH:mm:ss" \
   --kill-others \
-  "cd \"$BACKEND\" && npm run dev" \
-  "cd \"$FRONTEND\" && npm run dev"
+  "cd \"$BACKEND\" && PORT=5001 npm run dev" \
+  "cd \"$FRONTEND\" && PORT=3005 npm run dev"
